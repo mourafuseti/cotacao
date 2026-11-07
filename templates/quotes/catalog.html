@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-heading">
     <div><span class="eyebrow">PRODUTOS DA EMPRESA</span><h1>Catálogo de produtos</h1><p>Importe sua planilha e reutilize os produtos ao criar cotações.</p></div>
-    <a class="button" href="{% url 'quotes:catalog_import' %}">Importar Excel</a>
+    {% if request.user.can_buy %}<a class="button" href="{% url 'quotes:catalog_import' %}">Importar Excel</a>{% endif %}
 </section>
 <section class="stats-grid catalog-stats">
     <article class="stat-card"><span>Produtos cadastrados</span><strong>{{ product_count }}</strong><small>na sua empresa</small></article>
@@ -28,6 +28,6 @@
     </div>
     {% if product_count > 100 %}<p class="form-footnote">Exibindo até 100 produtos. Use a busca para localizar outros itens.</p>{% endif %}
 {% else %}
-    <div class="empty-state"><span>▤</span><strong>{% if search %}Nenhum produto encontrado{% else %}Seu catálogo ainda está vazio{% endif %}</strong><p>{% if search %}Tente outros termos ou limpe a busca.{% else %}Importe a planilha Excel da sua empresa para começar.{% endif %}</p>{% if not search %}<a class="button button-small" href="{% url 'quotes:catalog_import' %}">Importar primeiro catálogo</a>{% endif %}</div>
+    <div class="empty-state"><span>▤</span><strong>{% if search %}Nenhum produto encontrado{% else %}Seu catálogo ainda está vazio{% endif %}</strong><p>{% if search %}Tente outros termos ou limpe a busca.{% elif request.user.can_buy %}Importe a planilha Excel da sua empresa para começar.{% else %}Peça a um administrador ou cotador da empresa para importar os produtos.{% endif %}</p>{% if not search and request.user.can_buy %}<a class="button button-small" href="{% url 'quotes:catalog_import' %}">Importar primeiro catálogo</a>{% endif %}</div>
 {% endif %}
 {% endblock %}

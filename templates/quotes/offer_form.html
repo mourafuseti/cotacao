@@ -14,11 +14,24 @@
     </section>
     <form class="panel form-panel" method="post">
         {% csrf_token %}{% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+        {% if line_formset.non_form_errors %}<div class="alert error">{{ line_formset.non_form_errors }}</div>{% endif %}
+        <h2 class="form-section-title">Sua oferta por item</h2>
+        {{ line_formset.management_form }}
+        <div class="offer-lines" id="offer-lines">
+            {% for row in line_rows %}
+                <div class="offer-line" data-offer-line>
+                    {{ row.form.quote_item }}
+                    <div class="offer-line-name"><strong>{{ row.item.name }}</strong><small>Solicitado: {{ row.item.quantity }} {{ row.item.unit }}{% if row.item.specifications %} · {{ row.item.specifications }}{% endif %}</small></div>
+                    <div class="field"><label for="{{ row.form.quantity.id_for_label }}">{{ row.form.quantity.label }}</label>{{ row.form.quantity }}{% if row.form.quantity.errors %}<small class="field-error">{{ row.form.quantity.errors|striptags }}</small>{% endif %}</div>
+                    <div class="field"><label for="{{ row.form.unit_price.id_for_label }}">{{ row.form.unit_price.label }}</label>{{ row.form.unit_price }}{% if row.form.unit_price.errors %}<small class="field-error">{{ row.form.unit_price.errors|striptags }}</small>{% endif %}</div>
+                </div>
+            {% endfor %}
+        </div>
         <h2 class="form-section-title">Valores e entrega</h2>
-        {% for field in form %}{% if field.name == "total_price" or field.name == "freight_price" or field.name == "delivery_days" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "total_price" %}<small>Valor dos produtos, sem o frete.</small>{% elif field.name == "freight_price" %}<small>Informe 0,00 se o frete estiver incluso ou for gratuito.</small>{% elif quote.expected_delivery_days %}<small>A compradora deseja receber em até {{ quote.expected_delivery_days }} dias.</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
-        <div class="offer-total-preview"><span>Total da proposta (produtos + frete)</span><strong id="offer-total">R$ 0,00</strong></div>
+        {% for field in form %}{% if field.name == "freight_price" or field.name == "delivery_days" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "freight_price" %}<small>Informe 0,00 se o frete estiver incluso ou for gratuito.</small>{% elif quote.expected_delivery_days %}<small>A compradora deseja receber em até {{ quote.expected_delivery_days }} dias.</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
+        <div class="offer-total-preview"><span>Produtos <strong id="offer-products-total">R$ 0,00</strong><br>Total com frete</span><strong id="offer-total">R$ 0,00</strong></div>
         <h2 class="form-section-title">Garantia e condições</h2>
-        {% for field in form %}{% if field.name == "warranty_months" or field.name == "warranty_details" or field.name == "notes" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "warranty_months" %}<small>Informe 0 se não houver garantia.</small>{% elif field.name == "warranty_details" %}<small>{% if quote.minimum_warranty_months %}A compradora solicita no mínimo {{ quote.minimum_warranty_months }} meses.{% else %}Informe cobertura e condições aplicáveis.{% endif %}</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
+        {% for field in form %}{% if field.name == "valid_until" or field.name == "warranty_months" or field.name == "warranty_details" or field.name == "payment_terms" or field.name == "taxes_included" or field.name == "availability_notes" or field.name == "notes" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "warranty_months" %}<small>{% if quote.minimum_warranty_months %}A compradora solicita no mínimo {{ quote.minimum_warranty_months }} meses.{% else %}Informe 0 se não houver garantia.{% endif %}</small>{% elif field.name == "warranty_details" %}<small>Descreva cobertura e condições aplicáveis.</small>{% elif field.name == "taxes_included" %}<small>Marque para deixar claro se os valores já incluem impostos.</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
         <button class="button button-full" type="submit">Enviar proposta completa</button>
     </form>
 </div>

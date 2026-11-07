@@ -1,0 +1,7 @@
+Olá, {{ user.get_full_name|default:user.email }}.
+
+Confirme seu e-mail para ativar os recursos de compras e propostas da Cotação Pro:
+
+{{ verification_url }}
+
+Se você não criou esta conta, ignore esta mensagem.

@@ -15,8 +15,9 @@
             <nav class="nav-links">
                 <a href="{% url 'quotes:dashboard' %}">Painel</a>
                 <a href="{% url 'quotes:quote_list' %}">Cotações</a>
-                <a href="{% url 'quotes:catalog' %}">Catálogo</a>
-                {% if request.user.company.can_buy %}<a class="button button-small" href="{% url 'quotes:quote_create' %}">Nova cotação</a>{% endif %}
+                {% if request.user.can_view_catalog %}<a href="{% url 'quotes:catalog' %}">Catálogo</a>{% endif %}
+                {% if request.user.can_manage_company %}<a href="{% url 'accounts:team' %}">Equipe</a>{% endif %}
+                {% if request.user.can_buy %}<a class="button button-small" href="{% url 'quotes:quote_create' %}">Nova cotação</a>{% endif %}
                 <form method="post" action="{% url 'accounts:logout' %}">
                     {% csrf_token %}
                     <button class="link-button" type="submit">Sair</button>
@@ -34,6 +35,9 @@
             <div class="messages">
                 {% for message in messages %}<div class="alert {{ message.tags }}">{{ message }}</div>{% endfor %}
             </div>
+        {% endif %}
+        {% if request.user.is_authenticated and request.user.company and not request.user.email_verified and request.resolver_match.url_name != "dashboard" %}
+            <div class="alert warning">Confirme seu e-mail para publicar cotações e enviar propostas. <form class="inline-form" method="post" action="{% url 'accounts:resend_verification' %}">{% csrf_token %}<button class="inline-link" type="submit">Reenviar confirmação</button></form></div>
         {% endif %}
         {% block content %}{% endblock %}
     </main>

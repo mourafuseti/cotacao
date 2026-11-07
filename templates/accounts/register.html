@@ -2,7 +2,7 @@
 {% block title %}Cadastrar empresa | Cotação Pro{% endblock %}
 {% block content %}
 <section class="form-layout form-layout-wide">
-    <div class="form-intro"><span class="eyebrow">CADASTRO EMPRESARIAL</span><h1>Vamos conectar sua empresa.</h1><p>Cadastre seus dados para comprar, fornecer ou fazer as duas coisas na plataforma.</p></div>
+    <div class="form-intro"><span class="eyebrow">CADASTRO EMPRESARIAL</span><h1>Vamos conectar sua empresa.</h1><p>Cadastre seus dados para comprar, fornecer ou fazer as duas coisas na plataforma. Enviaremos um link para confirmar o e-mail.</p></div>
     <form class="panel form-panel" method="post">
         {% csrf_token %}
         {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}

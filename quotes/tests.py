@@ -3,14 +3,23 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import Workbook
 
 from accounts.models import Company
-from .models import Product, QuoteItem, QuoteOffer, QuoteRequest
+from .models import (
+    Product,
+    QuoteEvent,
+    QuoteItem,
+    QuoteNotification,
+    QuoteOffer,
+    QuoteRequest,
+)
 
 
 def catalog_workbook(rows):
@@ -242,20 +251,35 @@ class QuoteWorkflowTests(TestCase):
         response = self.client.post(
             reverse("quotes:offer_create", args=[self.quote.pk]),
             {
-                "total_price": "1250.00",
                 "freight_price": "75.50",
                 "delivery_days": "7",
                 "warranty_months": "18",
                 "warranty_details": "Garantia do fabricante",
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "1",
+                "form-MAX_NUM_FORMS": "30",
+                "form-0-quote_item": str(self.quote.items.get().pk),
+                "form-0-quantity": "4",
+                "form-0-unit_price": "312.50",
                 "notes": "Entrega com agendamento",
             },
         )
-        self.assertEqual(response.status_code, 302)
+        if response.status_code != 302:
+            self.fail(
+                f"Form errors: {response.context['form'].errors}; "
+                f"line errors: {response.context['line_formset'].errors}; "
+                f"formset errors: {response.context['line_formset'].non_form_errors()}"
+            )
         offer = QuoteOffer.objects.get(quote_request=self.quote)
         self.assertEqual(offer.total_price, Decimal("1250.00"))
         self.assertEqual(offer.freight_price, Decimal("75.50"))
         self.assertEqual(offer.total_with_freight, Decimal("1325.50"))
         self.assertEqual(offer.warranty_months, 18)
+        line = offer.items.get()
+        self.assertEqual(line.quantity, 4)
+        self.assertEqual(line.unit_price, Decimal("312.50"))
+        self.assertEqual(line.line_total, Decimal("1250.00"))
 
         self.client.force_login(self.buyer)
         detail = self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk]))
@@ -277,6 +301,142 @@ class QuoteWorkflowTests(TestCase):
         )
         self.assertEqual(closed_detail.status_code, 200)
         self.assertContains(closed_detail, "Sua proposta enviada")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_buyer_can_close_and_award_a_detailed_offer(self):
+        self.client.force_login(self.supplier)
+        response = self.client.post(
+            reverse("quotes:offer_create", args=[self.quote.pk]),
+            {
+                "freight_price": "75.50",
+                "delivery_days": "7",
+                "warranty_months": "18",
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "1",
+                "form-MAX_NUM_FORMS": "30",
+                "form-0-quote_item": str(self.quote.items.get().pk),
+                "form-0-quantity": "4",
+                "form-0-unit_price": "312.50",
+            },
+        )
+        if response.status_code != 302:
+            self.fail(
+                f"Form errors: {response.context['form'].errors}; "
+                f"line errors: {response.context['line_formset'].errors}; "
+                f"formset errors: {response.context['line_formset'].non_form_errors()}"
+            )
+        offer = QuoteOffer.objects.get(quote_request=self.quote)
+
+        self.client.force_login(self.buyer)
+        response = self.client.post(
+            reverse("quotes:quote_close", args=[self.quote.pk]),
+            {"reason": "Prazo de recebimento finalizado."},
+        )
+        self.assertRedirects(
+            response, reverse("quotes:quote_detail", args=[self.quote.pk])
+        )
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, QuoteRequest.Status.ANALYSIS)
+        self.assertTrue(
+            QuoteEvent.objects.filter(
+                quote_request=self.quote, event_type=QuoteEvent.EventType.ANALYSIS
+            ).exists()
+        )
+
+        response = self.client.post(
+            reverse("quotes:quote_award", args=[self.quote.pk]),
+            {
+                "offer": offer.pk,
+                "decision_reason": "Melhor custo total e prazo compatível.",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("quotes:quote_detail", args=[self.quote.pk])
+        )
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, QuoteRequest.Status.AWARDED)
+        self.assertEqual(self.quote.winning_offer, offer)
+        self.assertEqual(self.quote.decision_reason, "Melhor custo total e prazo compatível.")
+        self.assertTrue(
+            QuoteEvent.objects.filter(
+                quote_request=self.quote, event_type=QuoteEvent.EventType.AWARDED
+            ).exists()
+        )
+        self.assertGreaterEqual(len(mail.outbox), 3)
+        self.assertContains(
+            self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk])),
+            "Fornecedor selecionado",
+        )
+
+    def test_supplier_cannot_offer_quantity_above_requested(self):
+        self.client.force_login(self.supplier)
+        response = self.client.post(
+            reverse("quotes:offer_create", args=[self.quote.pk]),
+            {
+                "freight_price": "0",
+                "delivery_days": "7",
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "1",
+                "form-MAX_NUM_FORMS": "30",
+                "form-0-quote_item": str(self.quote.items.get().pk),
+                "form-0-quantity": "5",
+                "form-0-unit_price": "10.00",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(QuoteOffer.objects.filter(quote_request=self.quote).exists())
+        self.assertContains(response, "não pode exceder as 4 solicitadas")
+
+    def test_supplier_formset_tampering_does_not_break_offer_page(self):
+        self.client.force_login(self.supplier)
+        response = self.client.post(
+            reverse("quotes:offer_create", args=[self.quote.pk]),
+            {
+                "freight_price": "0",
+                "delivery_days": "7",
+                "form-TOTAL_FORMS": "0",
+                "form-INITIAL_FORMS": "0",
+                "form-MIN_NUM_FORMS": "1",
+                "form-MAX_NUM_FORMS": "30",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(QuoteOffer.objects.filter(quote_request=self.quote).exists())
+
+    def test_supplier_cannot_exceed_offer_total_field_limit(self):
+        self.client.force_login(self.supplier)
+        response = self.client.post(
+            reverse("quotes:offer_create", args=[self.quote.pk]),
+            {
+                "freight_price": "0",
+                "delivery_days": "7",
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "1",
+                "form-MAX_NUM_FORMS": "30",
+                "form-0-quote_item": str(self.quote.items.get().pk),
+                "form-0-quantity": "4",
+                "form-0-unit_price": "9999999999.99",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(QuoteOffer.objects.filter(quote_request=self.quote).exists())
+        self.assertContains(response, "excede o limite permitido")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_deadline_reminder_command_is_idempotent(self):
+        self.quote.deadline = timezone.now() + timedelta(hours=23)
+        self.quote.save(update_fields=["deadline"])
+
+        call_command("send_quote_deadline_reminders")
+        call_command("send_quote_deadline_reminders")
+
+        self.assertEqual(QuoteNotification.objects.filter(quote_request=self.quote).count(), 1)
+        notification = QuoteNotification.objects.get(quote_request=self.quote)
+        self.assertIsNotNone(notification.sent_at)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_buyer_sees_offers_ordered_by_total_including_freight(self):
         other_company = Company.objects.create(
@@ -351,3 +511,21 @@ class QuoteWorkflowTests(TestCase):
         self.client.force_login(other_user)
         response = self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk]))
         self.assertEqual(response.status_code, 403)
+
+    def test_supplier_role_cannot_read_its_company_buyer_quotes(self):
+        supplier_member = get_user_model().objects.create_user(
+            None,
+            "supplier-member@example.com",
+            "supplier-member-password",
+            company=self.buyer_company,
+            role=get_user_model().CompanyRole.SUPPLIER,
+        )
+        self.client.force_login(supplier_member)
+        response = self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk]))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse("quotes:quote_list"))
+        self.assertNotContains(response, self.quote.title)
+        self.assertEqual(self.client.get(reverse("quotes:catalog")).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse("quotes:catalog_import")).status_code, 403
+        )

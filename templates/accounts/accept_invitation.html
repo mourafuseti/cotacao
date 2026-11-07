@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Aceitar convite | Cotação Pro{% endblock %}
+{% block content %}
+<section class="form-layout">
+    <div class="form-intro"><span class="eyebrow">CONVITE DA EMPRESA</span><h1>Ative seu acesso.</h1><p>Você foi convidado para {{ invitation.company }} como {{ invitation.get_role_display }}. Defina seu nome e uma senha segura.</p></div>
+    <form class="panel form-panel" method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="field"><label>E-mail</label><input value="{{ invitation.email }}" disabled></div>
+        {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text|safe }}</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endfor %}
+        <button class="button button-full" type="submit">Aceitar convite</button>
+    </form>
+</section>
+{% endblock %}

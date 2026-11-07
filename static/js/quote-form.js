@@ -102,20 +102,31 @@ if (catalogSearch && catalogSelect) {
     });
 }
 
-const productPriceInput = document.getElementById("id_total_price");
 const freightPriceInput = document.getElementById("id_freight_price");
 const offerTotalOutput = document.getElementById("offer-total");
-if (productPriceInput && freightPriceInput && offerTotalOutput) {
+const productTotalOutput = document.getElementById("offer-products-total");
+const offerLines = document.getElementById("offer-lines");
+if (offerLines && freightPriceInput && offerTotalOutput) {
     const formatCurrency = new Intl.NumberFormat("pt-BR", {
         style: "currency",
         currency: "BRL",
     });
     const updateOfferTotal = () => {
-        const productTotal = Number(productPriceInput.value) || 0;
+        const productTotal = [...offerLines.querySelectorAll("[data-offer-line]")].reduce(
+            (total, line) => {
+                const quantity = Number(line.querySelector('input[name$="-quantity"]').value) || 0;
+                const price = Number(line.querySelector('input[name$="-unit_price"]').value) || 0;
+                return total + quantity * price;
+            },
+            0,
+        );
         const freightTotal = Number(freightPriceInput.value) || 0;
+        if (productTotalOutput) {
+            productTotalOutput.textContent = formatCurrency.format(productTotal);
+        }
         offerTotalOutput.textContent = formatCurrency.format(productTotal + freightTotal);
     };
-    productPriceInput.addEventListener("input", updateOfferTotal);
+    offerLines.addEventListener("input", updateOfferTotal);
     freightPriceInput.addEventListener("input", updateOfferTotal);
     updateOfferTotal();
 }

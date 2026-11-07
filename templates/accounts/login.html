@@ -2,7 +2,7 @@
 {% block title %}Acessar | Cotação Pro{% endblock %}
 {% block content %}
 <section class="form-layout">
-    <div class="form-intro"><span class="eyebrow">BEM-VINDO DE VOLTA</span><h1>Acesse sua empresa.</h1><p>Entre com o CNPJ cadastrado e sua senha.</p></div>
+    <div class="form-intro"><span class="eyebrow">BEM-VINDO DE VOLTA</span><h1>Acesse sua empresa.</h1><p>Entre com o CNPJ da empresa ou seu e-mail e sua senha.</p></div>
     <form class="panel form-panel" method="post">
         {% csrf_token %}
         {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
@@ -10,6 +10,7 @@
             <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>
         {% endfor %}
         <button class="button button-full" type="submit">Entrar com segurança</button>
+        <p class="form-footnote"><a href="{% url 'accounts:password_reset' %}">Esqueci minha senha</a></p>
         <p class="form-footnote">Ainda não tem cadastro? <a href="{% url 'accounts:register' %}">Cadastre sua empresa</a>.</p>
     </form>
 </section>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Encerrar cotação | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <div><a class="back-link" href="{% url 'quotes:quote_detail' quote.pk %}">← Voltar à cotação</a><span class="eyebrow">ETAPA DE ANÁLISE</span><h1>Encerrar recebimento</h1><p>Após encerrar, fornecedores não poderão enviar novas propostas.</p></div>
+</section>
+<form class="panel form-panel decision-form" method="post">
+    {% csrf_token %}
+    <div class="decision-summary"><strong>{{ quote.title }}</strong><span>Prazo atual: {{ quote.deadline|date:"d/m/Y H:i" }}</span><span>{{ quote.offers.count }} proposta(s) recebida(s)</span></div>
+    {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="field"><label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>{{ form.reason }}{% if form.reason.errors %}<small class="field-error">{{ form.reason.errors|striptags }}</small>{% endif %}<small>Opcional. A observação será registrada no histórico da cotação.</small></div>
+    <div class="form-actions"><a class="button button-quiet" href="{% url 'quotes:quote_detail' quote.pk %}">Voltar</a><button class="button" type="submit">Encerrar e iniciar análise</button></div>
+</form>
+{% endblock %}

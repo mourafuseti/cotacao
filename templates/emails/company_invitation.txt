@@ -1,0 +1,9 @@
+Olá!
+
+{{ invitation.created_by.get_full_name|default:invitation.created_by.email }} convidou você para acessar {{ company }} na Cotação Pro como {{ invitation.get_role_display }}.
+
+O convite pode ser utilizado uma vez e expira em 7 dias. Defina sua senha neste link:
+
+{{ invite_url }}
+
+Se você não esperava este convite, ignore esta mensagem.

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Product, QuoteItem, QuoteOffer, QuoteRequest
+from .models import Product, QuoteEvent, QuoteItem, QuoteOffer, QuoteOfferItem, QuoteRequest
 
 
 class QuoteItemInline(admin.TabularInline):
@@ -24,6 +24,12 @@ class QuoteRequestAdmin(admin.ModelAdmin):
     inlines = [QuoteItemInline]
 
 
+class QuoteOfferItemInline(admin.TabularInline):
+    model = QuoteOfferItem
+    extra = 0
+    readonly_fields = ("line_total",)
+
+
 @admin.register(QuoteOffer)
 class QuoteOfferAdmin(admin.ModelAdmin):
     list_display = (
@@ -39,6 +45,15 @@ class QuoteOfferAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("quote_request__title", "supplier__legal_name", "supplier__cnpj")
     readonly_fields = ("total_with_freight",)
+    inlines = [QuoteOfferItemInline]
+
+
+@admin.register(QuoteEvent)
+class QuoteEventAdmin(admin.ModelAdmin):
+    list_display = ("quote_request", "event_type", "actor", "created_at")
+    list_filter = ("event_type", "created_at")
+    search_fields = ("quote_request__title", "summary", "actor__email")
+    readonly_fields = ("quote_request", "actor", "event_type", "summary", "created_at")
 
 
 @admin.register(Product)

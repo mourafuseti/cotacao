@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Equipe | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading"><div><span class="eyebrow">ADMINISTRAÇÃO DA EMPRESA</span><h1>Equipe e acessos</h1><p>Convide pessoas da sua empresa e conceda somente as permissões necessárias.</p></div></section>
+<div class="detail-grid team-layout">
+    <form class="panel form-panel" method="post">
+        {% csrf_token %}
+        <h2 class="form-section-title">Convidar novo membro</h2>
+        {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endfor %}
+        <button class="button button-full" type="submit">Enviar convite seguro</button>
+        <p class="form-footnote">O convite expira em 7 dias. O membro define a própria senha.</p>
+    </form>
+    <section class="panel detail-panel">
+        <h2>Membros ativos</h2>
+        {% for member in members %}
+            <div class="team-member"><div><strong>{{ member.get_full_name|default:member.email }}</strong><small>{{ member.email }}</small></div><span class="badge">{{ member.get_role_display }}</span>{% if not member.email_verified %}<small class="field-error">E-mail pendente</small>{% endif %}</div>
+        {% empty %}<div class="empty-state compact"><strong>Nenhum membro ativo</strong></div>{% endfor %}
+        <h2 class="team-subheading">Convites pendentes</h2>
+        {% for invitation in invitations %}<div class="team-member"><div><strong>{{ invitation.email }}</strong><small>Expira em {{ invitation.expires_at|date:"d/m/Y H:i" }}</small></div><span class="badge">{{ invitation.get_role_display }}</span></div>
+        {% empty %}<p class="muted-copy">Nenhum convite aguardando resposta.</p>{% endfor %}
+    </section>
+</div>
+{% endblock %}

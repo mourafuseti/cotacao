@@ -1,4 +1,6 @@
+import csv
 import json
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -6,12 +8,28 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.utils import IntegrityError
 from django.db.models import DecimalField, ExpressionWrapper, F, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .catalog_import import parse_catalog_workbook
-from .forms import CatalogUploadForm, QuoteItemFormSet, QuoteOfferForm, QuoteRequestForm
-from .models import Product, QuoteOffer, QuoteRequest
+from .forms import (
+    CatalogUploadForm,
+    QuoteCloseForm,
+    QuoteDecisionForm,
+    QuoteItemFormSet,
+    QuoteOfferForm,
+    QuoteOfferLineFormSet,
+    QuoteRequestForm,
+)
+from .models import (
+    Product,
+    QuoteEvent,
+    QuoteItem,
+    QuoteOffer,
+    QuoteOfferItem,
+    QuoteRequest,
+)
 
 
 @login_required
@@ -26,14 +44,23 @@ def dashboard(request):
         "open_quotes": QuoteRequest.objects.filter(
             status=QuoteRequest.Status.OPEN, deadline__gt=timezone.now()
         ).count(),
+        "awarded_quotes": QuoteRequest.objects.filter(
+            buyer=company, status=QuoteRequest.Status.AWARDED
+        ).count(),
     }
-    if company.can_buy:
+    if request.user.can_buy:
+        company_quotes = QuoteRequest.objects.filter(buyer=company)
         context["my_quotes"] = (
-            QuoteRequest.objects.filter(buyer=company)
+            company_quotes
             .prefetch_related("items", "offers")
             .order_by("-created_at")[:5]
         )
-    if company.can_supply:
+        context["company_quote_count"] = company_quotes.count()
+        context["analysis_quotes"] = company_quotes.filter(
+            status=QuoteRequest.Status.ANALYSIS
+        ).count()
+    if request.user.can_supply:
+        company_offers = QuoteOffer.objects.filter(supplier=company)
         context["available_quotes"] = (
             QuoteRequest.objects.filter(
                 status=QuoteRequest.Status.OPEN, deadline__gt=timezone.now()
@@ -42,9 +69,8 @@ def dashboard(request):
             .prefetch_related("items")
             .order_by("deadline")[:5]
         )
-        context["my_offers"] = QuoteOffer.objects.filter(supplier=company).select_related(
-            "quote_request"
-        )[:5]
+        context["my_offers"] = company_offers.select_related("quote_request")[:5]
+        context["company_offer_count"] = company_offers.count()
     return render(request, "quotes/dashboard.html", context)
 
 
@@ -53,12 +79,23 @@ def quote_list(request):
     company = request.user.company
     if company is None:
         raise PermissionDenied("Sua conta ainda não está vinculada a uma empresa.")
-    if company.can_buy:
-        quotes = QuoteRequest.objects.filter(buyer=company)
-    else:
-        quotes = QuoteRequest.objects.filter(
+    quote_filters = Q(pk__in=[])
+    if (
+        company.can_buy
+        and request.user.role
+        in (
+            request.user.CompanyRole.ADMIN,
+            request.user.CompanyRole.BUYER,
+            request.user.CompanyRole.VIEWER,
+        )
+    ):
+        quote_filters |= Q(buyer=company)
+    if request.user.can_supply:
+        supplier_quotes = QuoteRequest.objects.filter(
             status=QuoteRequest.Status.OPEN, deadline__gt=timezone.now()
         ).exclude(buyer=company)
+        quote_filters |= Q(pk__in=supplier_quotes.values("pk"))
+    quotes = QuoteRequest.objects.filter(quote_filters)
     return render(
         request,
         "quotes/quote_list.html",
@@ -69,8 +106,8 @@ def quote_list(request):
 @login_required
 def catalog(request):
     company = request.user.company
-    if company is None:
-        raise PermissionDenied("Sua conta ainda não está vinculada a uma empresa.")
+    if company is None or not request.user.can_view_catalog:
+        raise PermissionDenied("Seu perfil não tem acesso ao catálogo da empresa.")
     search = request.GET.get("q", "").strip()
     products = Product.objects.filter(company=company)
     if search:
@@ -96,8 +133,8 @@ def catalog(request):
 @login_required
 def catalog_import(request):
     company = request.user.company
-    if company is None:
-        raise PermissionDenied("Sua conta ainda não está vinculada a uma empresa.")
+    if company is None or not request.user.can_buy:
+        raise PermissionDenied("Somente a equipe compradora pode importar o catálogo.")
 
     preview_key = "catalog_import_preview"
     if request.method == "POST" and request.POST.get("action") == "confirm":
@@ -205,8 +242,11 @@ def catalog_import(request):
 @login_required
 def quote_create(request):
     company = request.user.company
-    if company is None or not company.can_buy:
+    if company is None or not request.user.can_buy:
         raise PermissionDenied("Somente empresas compradoras podem criar cotações.")
+    if not request.user.email_verified:
+        messages.error(request, "Confirme seu e-mail antes de publicar uma cotação.")
+        return redirect("quotes:dashboard")
 
     if request.method == "POST":
         form = QuoteRequestForm(request.POST)
@@ -220,7 +260,18 @@ def quote_create(request):
                 quote.save()
                 formset.instance = quote
                 formset.save()
+                QuoteEvent.objects.create(
+                    quote_request=quote,
+                    actor=request.user,
+                    event_type=QuoteEvent.EventType.PUBLISHED,
+                    summary="Cotação publicada para receber propostas.",
+                )
             messages.success(request, "Cotação publicada para os fornecedores.")
+            if not _notify_supplier_companies(request, quote):
+                messages.warning(
+                    request,
+                    "A cotação foi publicada, mas alguns fornecedores não receberam o e-mail.",
+                )
             return redirect("quotes:quote_detail", pk=quote.pk)
     else:
         form = QuoteRequestForm()
@@ -241,18 +292,28 @@ def quote_create(request):
 @login_required
 def quote_detail(request, pk):
     quote = get_object_or_404(
-        QuoteRequest.objects.prefetch_related("items", "offers__supplier"),
+        QuoteRequest.objects.select_related("winning_offer__supplier").prefetch_related(
+            "items", "offers__supplier", "offers__items__quote_item"
+        ),
         pk=pk,
     )
     company = request.user.company
     if company is None:
         raise PermissionDenied("Sua conta ainda não está vinculada a uma empresa.")
-    is_buyer = quote.buyer_id == company.id
-    existing_offer = (
-        quote.offers.filter(supplier=company).first() if company.can_supply else None
+    is_buyer = (
+        quote.buyer_id == company.id
+        and company.can_buy
+        and request.user.role in (
+        request.user.CompanyRole.ADMIN,
+        request.user.CompanyRole.BUYER,
+        request.user.CompanyRole.VIEWER,
+        )
     )
+    existing_offer = quote.offers.filter(supplier=company).first() if request.user.can_supply else None
+    if quote.buyer_id == company.id and not is_buyer:
+        raise PermissionDenied("Seu perfil não tem acesso de leitura às cotações da empresa.")
     if not is_buyer and not (
-        company.can_supply and (quote.is_open or existing_offer is not None)
+        request.user.can_supply and (quote.is_open or existing_offer is not None)
     ):
         raise PermissionDenied("Você não tem acesso a esta cotação.")
     offers = quote.offers.all() if is_buyer else quote.offers.filter(supplier=company)
@@ -271,6 +332,12 @@ def quote_detail(request, pk):
             "offers": offers,
             "is_buyer": is_buyer,
             "own_offer": own_offer,
+            "can_view_decision": is_buyer
+            or (
+                own_offer is not None
+                and own_offer.pk == quote.winning_offer_id
+            ),
+            "events": quote.events.select_related("actor") if is_buyer else [],
         },
     )
 
@@ -279,27 +346,350 @@ def quote_detail(request, pk):
 def offer_create(request, pk):
     quote = get_object_or_404(QuoteRequest, pk=pk)
     company = request.user.company
-    if company is None or not company.can_supply or quote.buyer_id == company.id or not quote.is_open:
+    if company is None or not request.user.can_supply or quote.buyer_id == company.id or not quote.is_open:
         raise PermissionDenied("Sua empresa não pode enviar proposta para esta cotação.")
+    if not request.user.email_verified:
+        messages.error(request, "Confirme seu e-mail antes de enviar uma proposta.")
+        return redirect("quotes:dashboard")
     if quote.offers.filter(supplier=company).exists():
         messages.info(request, "Sua empresa já enviou uma proposta para esta cotação.")
         return redirect("quotes:quote_detail", pk=quote.pk)
 
+    quote_items = list(quote.items.all())
+    initial_lines = [
+        {"quote_item": item.pk, "quantity": item.quantity} for item in quote_items
+    ]
     if request.method == "POST":
         form = QuoteOfferForm(request.POST)
-        if form.is_valid():
+        line_formset = QuoteOfferLineFormSet(
+            request.POST,
+            initial=initial_lines,
+            quote_items=quote_items,
+            form_kwargs={"quote_items": QuoteItem.objects.filter(quote_request=quote)},
+        )
+        if form.is_valid() and line_formset.is_valid():
+            lines = [
+                (line.cleaned_data["quote_item"], line.cleaned_data["quantity"], line.cleaned_data["unit_price"])
+                for line in line_formset.forms
+            ]
+            product_total = sum(
+                (quantity * unit_price for _, quantity, unit_price in lines),
+                start=Decimal("0.00"),
+            )
             offer = form.save(commit=False)
+            offer.total_price = product_total
             offer.quote_request = quote
             offer.supplier = company
             offer.created_by = request.user
             try:
                 with transaction.atomic():
                     offer.save()
+                    QuoteOfferItem.objects.bulk_create(
+                        [
+                            QuoteOfferItem(
+                                quote_offer=offer,
+                                quote_item=item,
+                                quantity=quantity,
+                                unit_price=unit_price,
+                            )
+                            for item, quantity, unit_price in lines
+                        ]
+                    )
+                    QuoteEvent.objects.create(
+                        quote_request=quote,
+                        actor=request.user,
+                        event_type=QuoteEvent.EventType.OFFER_RECEIVED,
+                        summary=f"Proposta recebida de {company}.",
+                    )
             except IntegrityError:
                 form.add_error(None, "Sua empresa já enviou uma proposta para esta cotação.")
             else:
                 messages.success(request, "Proposta enviada com sucesso.")
+                if not _notify_buyer(request, quote, company):
+                    messages.warning(
+                        request,
+                        "A proposta foi enviada, mas a compradora não recebeu o e-mail de aviso.",
+                    )
                 return redirect("quotes:quote_detail", pk=quote.pk)
     else:
         form = QuoteOfferForm()
-    return render(request, "quotes/offer_form.html", {"form": form, "quote": quote})
+        line_formset = QuoteOfferLineFormSet(
+            initial=initial_lines,
+            quote_items=quote_items,
+            form_kwargs={"quote_items": QuoteItem.objects.filter(quote_request=quote)},
+        )
+    line_rows = [
+        {"item": item, "form": form}
+        for item, form in zip(quote_items, line_formset.forms)
+    ]
+    return render(
+        request,
+        "quotes/offer_form.html",
+        {
+            "form": form,
+            "line_formset": line_formset,
+            "line_rows": line_rows,
+            "quote": quote,
+            "quote_items": quote_items,
+        },
+    )
+
+
+@login_required
+def quote_close(request, pk):
+    quote = get_object_or_404(QuoteRequest, pk=pk)
+    if request.user.company_id != quote.buyer_id or not request.user.can_buy:
+        raise PermissionDenied("Somente a equipe compradora pode encerrar esta cotação.")
+    if quote.status != QuoteRequest.Status.OPEN:
+        messages.error(request, "Esta cotação não está recebendo propostas.")
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    form = QuoteCloseForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        quote.status = QuoteRequest.Status.ANALYSIS
+        with transaction.atomic():
+            quote.save(update_fields=["status"])
+            QuoteEvent.objects.create(
+                quote_request=quote,
+                actor=request.user,
+                event_type=QuoteEvent.EventType.ANALYSIS,
+                summary=form.cleaned_data["reason"] or "Recebimento de propostas encerrado.",
+            )
+        messages.success(request, "Recebimento encerrado. A cotação está em análise.")
+        if not _notify_offer_participants(
+            quote,
+            subject=f"Prazo encerrado — {quote.title}",
+            body=(
+                f"O recebimento de propostas para {quote.title} foi encerrado e a "
+                "cotação está em análise.\n"
+                f"Acompanhe o processo: {request.build_absolute_uri(f'/cotacoes/{quote.pk}/')}"
+            ),
+        ):
+            messages.warning(
+                request,
+                "A cotação foi encerrada, mas alguns fornecedores não receberam o aviso.",
+            )
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    return render(
+        request, "quotes/quote_close.html", {"form": form, "quote": quote}
+    )
+
+
+@login_required
+def quote_award(request, pk):
+    quote = get_object_or_404(QuoteRequest, pk=pk)
+    if request.user.company_id != quote.buyer_id or not request.user.can_buy:
+        raise PermissionDenied("Somente a equipe compradora pode selecionar uma proposta.")
+    if quote.status not in (QuoteRequest.Status.ANALYSIS, QuoteRequest.Status.CLOSED):
+        messages.error(request, "Encerre o recebimento antes de concluir a cotação.")
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    if not quote.offers.exists():
+        messages.error(request, "Não há propostas recebidas para selecionar.")
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    form = QuoteDecisionForm(
+        request.POST or None,
+        quote=quote,
+    )
+    if request.method == "POST" and form.is_valid():
+        offer = form.cleaned_data["offer"]
+        if offer.quote_request_id != quote.pk:
+            raise PermissionDenied("A proposta escolhida não pertence a esta cotação.")
+        with transaction.atomic():
+            quote.winning_offer = offer
+            quote.decision_reason = form.cleaned_data["decision_reason"]
+            quote.awarded_at = timezone.now()
+            quote.status = QuoteRequest.Status.AWARDED
+            quote.save(
+                update_fields=[
+                    "winning_offer",
+                    "decision_reason",
+                    "awarded_at",
+                    "status",
+                ]
+            )
+            QuoteEvent.objects.create(
+                quote_request=quote,
+                actor=request.user,
+                event_type=QuoteEvent.EventType.AWARDED,
+                summary=f"Fornecedor selecionado: {offer.supplier}.",
+            )
+        messages.success(request, f"{offer.supplier} foi selecionado para esta cotação.")
+        if not _notify_offer_participants(
+            quote,
+            subject=f"Resultado da cotação — {quote.title}",
+            body=(
+                f"A análise da cotação {quote.title} foi concluída.\n"
+                f"Acompanhe o resultado: {request.build_absolute_uri(f'/cotacoes/{quote.pk}/')}"
+            ),
+        ):
+            messages.warning(
+                request,
+                "A decisão foi registrada, mas alguns fornecedores não receberam o aviso.",
+            )
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    return render(
+        request,
+        "quotes/quote_award.html",
+        {"form": form, "quote": quote},
+    )
+
+
+@login_required
+def quote_cancel(request, pk):
+    quote = get_object_or_404(QuoteRequest, pk=pk)
+    if request.user.company_id != quote.buyer_id or not request.user.can_buy:
+        raise PermissionDenied("Somente a equipe compradora pode cancelar esta cotação.")
+    if request.method != "POST":
+        raise PermissionDenied("O cancelamento deve ser confirmado pelo formulário.")
+    if quote.status not in (QuoteRequest.Status.OPEN, QuoteRequest.Status.ANALYSIS):
+        messages.error(request, "Esta cotação não pode mais ser cancelada.")
+        return redirect("quotes:quote_detail", pk=quote.pk)
+    with transaction.atomic():
+        quote.status = QuoteRequest.Status.CANCELLED
+        quote.save(update_fields=["status"])
+        QuoteEvent.objects.create(
+            quote_request=quote,
+            actor=request.user,
+            event_type=QuoteEvent.EventType.CANCELLED,
+            summary="Cotação cancelada pela empresa compradora.",
+        )
+    messages.success(request, "Cotação cancelada.")
+    if not _notify_offer_participants(
+        quote,
+        subject=f"Cotação cancelada — {quote.title}",
+        body=f"A cotação {quote.title} foi cancelada pela empresa compradora.",
+    ):
+        messages.warning(
+            request,
+            "A cotação foi cancelada, mas alguns fornecedores não receberam o aviso.",
+        )
+    return redirect("quotes:quote_detail", pk=quote.pk)
+
+
+@login_required
+def quote_export(request, pk):
+    quote = get_object_or_404(QuoteRequest, pk=pk, buyer=request.user.company)
+    if not request.user.can_buy:
+        raise PermissionDenied("Somente a equipe compradora pode exportar propostas.")
+    response = HttpResponse(content_type="text/csv; charset=utf-8-sig")
+    response["Content-Disposition"] = f'attachment; filename="cotacao-{quote.pk}-propostas.csv"'
+    writer = csv.writer(response, delimiter=";")
+    writer.writerow(
+        [
+            "Fornecedor",
+            "Produto",
+            "Quantidade solicitada",
+            "Quantidade ofertada",
+            "Preço unitário",
+            "Subtotal do item",
+            "Subtotal produtos",
+            "Frete",
+            "Total",
+            "Prazo (dias)",
+            "Garantia (meses)",
+            "Validade",
+            "Condições de pagamento",
+            "Impostos inclusos",
+            "Justificativa de decisão",
+        ]
+    )
+    for offer in quote.offers.select_related("supplier").prefetch_related("items__quote_item"):
+        lines = list(offer.items.all())
+        if not lines:
+            writer.writerow(
+                [
+                    _spreadsheet_safe(offer.supplier.legal_name),
+                    "Subtotal legado sem detalhamento",
+                    "",
+                    "",
+                    "",
+                    "",
+                    offer.total_price,
+                    offer.freight_price,
+                    offer.total_with_freight,
+                    offer.delivery_days,
+                    offer.warranty_months,
+                    offer.valid_until or "",
+                    _spreadsheet_safe(offer.payment_terms),
+                    "Sim" if offer.taxes_included else "Não",
+                    _spreadsheet_safe(quote.decision_reason),
+                ]
+            )
+        for line in lines:
+            writer.writerow(
+                [
+                    _spreadsheet_safe(offer.supplier.legal_name),
+                    _spreadsheet_safe(line.quote_item.name),
+                    line.quote_item.quantity,
+                    line.quantity,
+                    line.unit_price,
+                    line.line_total,
+                    offer.total_price,
+                    offer.freight_price,
+                    offer.total_with_freight,
+                    offer.delivery_days,
+                    offer.warranty_months,
+                    offer.valid_until or "",
+                    _spreadsheet_safe(offer.payment_terms),
+                    "Sim" if offer.taxes_included else "Não",
+                    _spreadsheet_safe(quote.decision_reason),
+                ]
+            )
+    return response
+
+
+def _spreadsheet_safe(value):
+    text = str(value or "")
+    return f"'{text}" if text.startswith(("=", "+", "-", "@", "\t", "\r")) else text
+
+
+def _send_quote_notice(recipients, subject, body):
+    from accounts.email_utils import send_account_email
+
+    success = True
+    for email in recipients:
+        success = (
+            send_account_email(subject=subject, body=body, recipient=email) and success
+        )
+    return success
+
+
+def _notify_supplier_companies(request, quote):
+    from accounts.models import Company, User
+
+    recipients = User.objects.filter(
+        is_active=True,
+        email_verified=True,
+        company__company_type__in=(
+            Company.CompanyType.SUPPLIER,
+            Company.CompanyType.BOTH,
+        ),
+    ).exclude(company=quote.buyer).values_list("email", flat=True).distinct()
+    body = (
+        f"Uma nova cotação foi publicada: {quote.title}\n"
+        f"Prazo para propostas: {timezone.localtime(quote.deadline):%d/%m/%Y %H:%M}\n"
+        f"Consulte as oportunidades na Cotação Pro: "
+        f"{request.build_absolute_uri('/cotacoes/')}"
+    )
+    return _send_quote_notice(list(recipients), "Nova cotação disponível", body)
+
+
+def _notify_buyer(request, quote, supplier):
+    recipients = quote.buyer.users.filter(
+        is_active=True, email_verified=True
+    ).values_list("email", flat=True)
+    body = (
+        f"{supplier} enviou uma proposta para a cotação {quote.title}.\n"
+        f"Confira preços, entrega e garantia: "
+        f"{request.build_absolute_uri(f'/cotacoes/{quote.pk}/')}"
+    )
+    return _send_quote_notice(
+        list(recipients), "Nova proposta recebida — Cotação Pro", body
+    )
+
+
+def _notify_offer_participants(quote, *, subject, body):
+    recipients = quote.offers.filter(
+        created_by__is_active=True,
+        created_by__email_verified=True,
+    ).values_list("created_by__email", flat=True).distinct()
+    return _send_quote_notice(list(recipients), subject, body)
