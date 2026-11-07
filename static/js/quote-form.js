@@ -101,3 +101,21 @@ if (catalogSearch && catalogSelect) {
         }
     });
 }
+
+const productPriceInput = document.getElementById("id_total_price");
+const freightPriceInput = document.getElementById("id_freight_price");
+const offerTotalOutput = document.getElementById("offer-total");
+if (productPriceInput && freightPriceInput && offerTotalOutput) {
+    const formatCurrency = new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+    });
+    const updateOfferTotal = () => {
+        const productTotal = Number(productPriceInput.value) || 0;
+        const freightTotal = Number(freightPriceInput.value) || 0;
+        offerTotalOutput.textContent = formatCurrency.format(productTotal + freightTotal);
+    };
+    productPriceInput.addEventListener("input", updateOfferTotal);
+    freightPriceInput.addEventListener("input", updateOfferTotal);
+    updateOfferTotal();
+}

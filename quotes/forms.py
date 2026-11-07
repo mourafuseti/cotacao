@@ -33,11 +33,27 @@ class QuoteRequestForm(forms.ModelForm):
 
     class Meta:
         model = QuoteRequest
-        fields = ("title", "description", "deadline")
+        fields = (
+            "title",
+            "description",
+            "delivery_address",
+            "expected_delivery_days",
+            "minimum_warranty_months",
+            "deadline",
+        )
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Ex.: Peças para manutenção"}),
             "description": forms.Textarea(
                 attrs={"rows": 3, "placeholder": "Contexto adicional para os fornecedores"}
+            ),
+            "delivery_address": forms.TextInput(
+                attrs={"placeholder": "Cidade/UF ou endereço para calcular o frete"}
+            ),
+            "expected_delivery_days": forms.NumberInput(
+                attrs={"min": 1, "placeholder": "Opcional"}
+            ),
+            "minimum_warranty_months": forms.NumberInput(
+                attrs={"min": 1, "placeholder": "Opcional"}
             ),
         }
 
@@ -90,10 +106,22 @@ QuoteItemFormSet = inlineformset_factory(
 class QuoteOfferForm(forms.ModelForm):
     class Meta:
         model = QuoteOffer
-        fields = ("total_price", "delivery_days", "notes")
+        fields = (
+            "total_price",
+            "freight_price",
+            "delivery_days",
+            "warranty_months",
+            "warranty_details",
+            "notes",
+        )
         widgets = {
             "total_price": forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+            "freight_price": forms.NumberInput(attrs={"min": "0", "step": "0.01"}),
             "delivery_days": forms.NumberInput(attrs={"min": 1}),
+            "warranty_months": forms.NumberInput(attrs={"min": 0}),
+            "warranty_details": forms.TextInput(
+                attrs={"placeholder": "Ex.: garantia do fabricante; condições aplicáveis"}
+            ),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -101,4 +129,10 @@ class QuoteOfferForm(forms.ModelForm):
         value = self.cleaned_data["total_price"]
         if value <= 0:
             raise forms.ValidationError("Informe um valor maior que zero.")
+        return value
+
+    def clean_freight_price(self):
+        value = self.cleaned_data["freight_price"]
+        if value < 0:
+            raise forms.ValidationError("O frete não pode ser negativo.")
         return value

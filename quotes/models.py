@@ -16,6 +16,19 @@ class QuoteRequest(models.Model):
     )
     title = models.CharField("título", max_length=160)
     description = models.TextField("detalhes", blank=True)
+    delivery_address = models.CharField("local de entrega", max_length=255, blank=True)
+    expected_delivery_days = models.PositiveIntegerField(
+        "prazo desejado de entrega em dias",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+    )
+    minimum_warranty_months = models.PositiveIntegerField(
+        "garantia mínima desejada em meses",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+    )
     status = models.CharField(
         "situação", max_length=10, choices=Status.choices, default=Status.OPEN
     )
@@ -106,15 +119,32 @@ class QuoteOffer(models.Model):
         related_name="submitted_offers",
         verbose_name="enviada por",
     )
-    total_price = models.DecimalField("valor total", max_digits=12, decimal_places=2)
+    total_price = models.DecimalField(
+        "valor dos produtos", max_digits=12, decimal_places=2
+    )
+    freight_price = models.DecimalField(
+        "valor do frete",
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
     delivery_days = models.PositiveIntegerField(
         "prazo de entrega em dias", validators=[MinValueValidator(1)]
+    )
+    warranty_months = models.PositiveIntegerField(
+        "garantia oferecida em meses",
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    warranty_details = models.CharField(
+        "detalhes da garantia", max_length=500, blank=True
     )
     notes = models.TextField("observações", blank=True)
     created_at = models.DateTimeField("enviada em", auto_now_add=True)
 
     class Meta:
-        ordering = ["total_price", "created_at"]
+        ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=("quote_request", "supplier"), name="unique_offer_per_supplier"
@@ -125,3 +155,11 @@ class QuoteOffer(models.Model):
 
     def __str__(self):
         return f"{self.supplier} — {self.quote_request}"
+
+    @property
+    def product_total(self):
+        return self.total_price
+
+    @property
+    def total_with_freight(self):
+        return self.total_price + self.freight_price

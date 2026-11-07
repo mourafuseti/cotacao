@@ -89,6 +89,9 @@ class QuoteWorkflowTests(TestCase):
             {
                 "title": "Compra de ferramentas",
                 "description": "Uso industrial",
+                "delivery_address": "São Paulo/SP",
+                "expected_delivery_days": "10",
+                "minimum_warranty_months": "12",
                 "deadline": (timezone.localtime() + timedelta(days=3)).strftime(
                     "%Y-%m-%dT%H:%M"
                 ),
@@ -109,6 +112,13 @@ class QuoteWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         created = QuoteRequest.objects.get(title="Compra de ferramentas")
         self.assertEqual(created.items.count(), 2)
+        self.assertEqual(created.delivery_address, "São Paulo/SP")
+        self.assertEqual(created.expected_delivery_days, 10)
+        self.assertEqual(created.minimum_warranty_months, 12)
+        detail = self.client.get(response.url)
+        self.assertContains(detail, "São Paulo/SP")
+        self.assertContains(detail, "até 10 dias")
+        self.assertContains(detail, "Garantia mínima")
 
     def test_buyer_can_create_quote_from_own_catalog(self):
         product = Product.objects.create(
@@ -231,11 +241,79 @@ class QuoteWorkflowTests(TestCase):
         self.client.force_login(self.supplier)
         response = self.client.post(
             reverse("quotes:offer_create", args=[self.quote.pk]),
-            {"total_price": "1250.00", "delivery_days": "7", "notes": "Frete incluso"},
+            {
+                "total_price": "1250.00",
+                "freight_price": "75.50",
+                "delivery_days": "7",
+                "warranty_months": "18",
+                "warranty_details": "Garantia do fabricante",
+                "notes": "Entrega com agendamento",
+            },
         )
         self.assertEqual(response.status_code, 302)
         offer = QuoteOffer.objects.get(quote_request=self.quote)
         self.assertEqual(offer.total_price, Decimal("1250.00"))
+        self.assertEqual(offer.freight_price, Decimal("75.50"))
+        self.assertEqual(offer.total_with_freight, Decimal("1325.50"))
+        self.assertEqual(offer.warranty_months, 18)
+
+        self.client.force_login(self.buyer)
+        detail = self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk]))
+        self.assertContains(detail, "R$ 1325,50")
+        self.assertContains(detail, "R$ 75,50")
+        self.assertContains(detail, "18 meses")
+
+        self.client.force_login(self.supplier)
+        supplier_detail = self.client.get(
+            reverse("quotes:quote_detail", args=[self.quote.pk])
+        )
+        self.assertContains(supplier_detail, "Sua proposta enviada")
+        self.assertNotContains(supplier_detail, "Enviar proposta")
+
+        self.quote.status = QuoteRequest.Status.CLOSED
+        self.quote.save(update_fields=["status"])
+        closed_detail = self.client.get(
+            reverse("quotes:quote_detail", args=[self.quote.pk])
+        )
+        self.assertEqual(closed_detail.status_code, 200)
+        self.assertContains(closed_detail, "Sua proposta enviada")
+
+    def test_buyer_sees_offers_ordered_by_total_including_freight(self):
+        other_company = Company.objects.create(
+            legal_name="Segundo Fornecedor Ltda",
+            cnpj="33000167000101",
+            email="second-supplier@example.com",
+            company_type=Company.CompanyType.SUPPLIER,
+        )
+        other_user = get_user_model().objects.create_user(
+            cnpj=other_company.cnpj,
+            email=other_company.email,
+            company=other_company,
+            password="second-supplier-password-123!",
+        )
+        expensive_offer = QuoteOffer.objects.create(
+            quote_request=self.quote,
+            supplier=self.supplier_company,
+            created_by=self.supplier,
+            total_price=Decimal("1000.00"),
+            freight_price=Decimal("500.00"),
+            delivery_days=3,
+            warranty_months=12,
+        )
+        cheaper_offer = QuoteOffer.objects.create(
+            quote_request=self.quote,
+            supplier=other_company,
+            created_by=other_user,
+            total_price=Decimal("1200.00"),
+            freight_price=Decimal("100.00"),
+            delivery_days=5,
+            warranty_months=24,
+        )
+        self.client.force_login(self.buyer)
+        response = self.client.get(reverse("quotes:quote_detail", args=[self.quote.pk]))
+        self.assertEqual(response.status_code, 200)
+        offer_ids = [offer.pk for offer in response.context["offers"]]
+        self.assertEqual(offer_ids, [cheaper_offer.pk, expensive_offer.pk])
 
     def test_company_dashboards_and_quote_detail_render(self):
         self.client.force_login(self.buyer)

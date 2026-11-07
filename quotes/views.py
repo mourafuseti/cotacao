@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.utils import IntegrityError
-from django.db.models import Q
+from django.db.models import DecimalField, ExpressionWrapper, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -248,13 +248,30 @@ def quote_detail(request, pk):
     if company is None:
         raise PermissionDenied("Sua conta ainda não está vinculada a uma empresa.")
     is_buyer = quote.buyer_id == company.id
-    if not is_buyer and not (company.can_supply and quote.is_open):
+    existing_offer = (
+        quote.offers.filter(supplier=company).first() if company.can_supply else None
+    )
+    if not is_buyer and not (
+        company.can_supply and (quote.is_open or existing_offer is not None)
+    ):
         raise PermissionDenied("Você não tem acesso a esta cotação.")
     offers = quote.offers.all() if is_buyer else quote.offers.filter(supplier=company)
+    own_offer = existing_offer if not is_buyer else None
+    offers = offers.annotate(
+        comparison_total=ExpressionWrapper(
+            F("total_price") + F("freight_price"),
+            output_field=DecimalField(max_digits=13, decimal_places=2),
+        )
+    ).order_by("comparison_total", "delivery_days", "created_at")
     return render(
         request,
         "quotes/quote_detail.html",
-        {"quote": quote, "offers": offers, "is_buyer": is_buyer},
+        {
+            "quote": quote,
+            "offers": offers,
+            "is_buyer": is_buyer,
+            "own_offer": own_offer,
+        },
     )
 
 

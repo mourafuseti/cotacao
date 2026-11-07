@@ -30,11 +30,12 @@ O arquivo `.env.example` documenta as variáveis, mas não é carregado automati
 1. A empresa cria uma conta como compradora, fornecedora ou ambas.
 2. A empresa importa o catálogo em Excel (.xlsx), confere a prévia e seleciona produtos ao criar cotações.
 3. Compradoras publicam uma cotação com itens, quantidades, especificações e prazo.
-4. Fornecedoras veem cotações abertas e enviam valor total, prazo de entrega e observações.
-5. A compradora compara as propostas recebidas na página da cotação.
+4. Compradoras podem informar destino, prazo desejado de entrega e garantia mínima; o prazo para receber propostas é apresentado separadamente.
+5. Fornecedoras informam subtotal dos produtos, frete, prazo de entrega, garantia e condições comerciais.
+6. A compradora compara propostas ordenadas pelo total de produtos + frete, com prazo e garantia visíveis.
 
 ## Escopo do MVP
 
 O catálogo aceita planilhas Excel `.xlsx` de até 10 MB e 5.000 produtos por importação. O arquivo precisa ter as colunas `ID do registro` e `Produto Estoque Nome`; número de pedidos, identificação, variação, marca, PN e bloqueio são reconhecidos quando presentes. Uma prévia é exibida antes da gravação; produtos são atualizados pelo par ID de origem + ID da variação, e os bloqueados não aparecem ao criar uma cotação. O número histórico de pedidos nunca é usado como quantidade solicitada.
 
-O cadastro aceita CNPJ numérico e alfanumérico de 14 caracteres com validação dos dígitos verificadores. Ainda não inclui recuperação de senha, verificação documental, limitação de tentativas de login, notificações por e-mail, anexos ou contratação/pagamento. Esses itens devem ser definidos antes de abrir o sistema ao público ou usar em produção.
+O cadastro aceita CNPJ numérico e alfanumérico de 14 caracteres com validação dos dígitos verificadores. Ainda não inclui recuperação de senha, verificação documental, limitação de tentativas de login, notificações por e-mail, anexos ou contratação/pagamento. Como próximos aprimoramentos comerciais, considerar preço por item, validade da proposta, impostos e condições de pagamento, anexos técnicos, escolha de fornecedor e trilha de auditoria. Esses itens devem ser definidos antes de abrir o sistema ao público ou usar em produção.

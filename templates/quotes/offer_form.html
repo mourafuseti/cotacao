@@ -1,13 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Enviar proposta | Cotação Pro{% endblock %}
 {% block content %}
-<section class="page-heading"><div><a class="back-link" href="{% url 'quotes:quote_detail' quote.pk %}">← Voltar à cotação</a><span class="eyebrow">PROPOSTA COMERCIAL</span><h1>{{ quote.title }}</h1><p>Apresente seu valor e prazo para fornecer os itens solicitados.</p></div></section>
+<section class="page-heading"><div><a class="back-link" href="{% url 'quotes:quote_detail' quote.pk %}">← Voltar à cotação</a><span class="eyebrow">PROPOSTA COMERCIAL</span><h1>{{ quote.title }}</h1><p>Informe valores, entrega e garantia para que a compradora compare sua proposta completa.</p></div></section>
 <div class="detail-grid offer-layout">
-    <section class="panel detail-panel"><h2>Itens solicitados</h2>{% for item in quote.items.all %}<div class="simple-item"><strong>{{ item.name }}</strong><span>{{ item.quantity }} {{ item.unit }}{% if item.specifications %} · {{ item.specifications }}{% endif %}</span></div>{% endfor %}</section>
+    <section class="panel detail-panel">
+        <h2>Itens e condições solicitadas</h2>
+        {% for item in quote.items.all %}<div class="simple-item"><strong>{{ item.name }}</strong><span>{{ item.quantity }} {{ item.unit }}{% if item.specifications %} · {{ item.specifications }}{% endif %}</span></div>{% endfor %}
+        <div class="offer-request-conditions">
+            {% if quote.delivery_address %}<p><strong>Local de entrega:</strong> {{ quote.delivery_address }}</p>{% endif %}
+            {% if quote.expected_delivery_days %}<p><strong>Prazo desejado:</strong> até {{ quote.expected_delivery_days }} dias</p>{% endif %}
+            {% if quote.minimum_warranty_months %}<p><strong>Garantia mínima:</strong> {{ quote.minimum_warranty_months }} meses</p>{% endif %}
+        </div>
+    </section>
     <form class="panel form-panel" method="post">
         {% csrf_token %}{% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
-        {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endfor %}
-        <button class="button button-full" type="submit">Enviar proposta</button>
+        <h2 class="form-section-title">Valores e entrega</h2>
+        {% for field in form %}{% if field.name == "total_price" or field.name == "freight_price" or field.name == "delivery_days" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "total_price" %}<small>Valor dos produtos, sem o frete.</small>{% elif field.name == "freight_price" %}<small>Informe 0,00 se o frete estiver incluso ou for gratuito.</small>{% elif quote.expected_delivery_days %}<small>A compradora deseja receber em até {{ quote.expected_delivery_days }} dias.</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
+        <div class="offer-total-preview"><span>Total da proposta (produtos + frete)</span><strong id="offer-total">R$ 0,00</strong></div>
+        <h2 class="form-section-title">Garantia e condições</h2>
+        {% for field in form %}{% if field.name == "warranty_months" or field.name == "warranty_details" or field.name == "notes" %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == "warranty_months" %}<small>Informe 0 se não houver garantia.</small>{% elif field.name == "warranty_details" %}<small>{% if quote.minimum_warranty_months %}A compradora solicita no mínimo {{ quote.minimum_warranty_months }} meses.{% else %}Informe cobertura e condições aplicáveis.{% endif %}</small>{% endif %}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
+        <button class="button button-full" type="submit">Enviar proposta completa</button>
     </form>
 </div>
 {% endblock %}

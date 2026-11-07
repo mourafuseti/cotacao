@@ -10,7 +10,15 @@ class QuoteItemInline(admin.TabularInline):
 
 @admin.register(QuoteRequest)
 class QuoteRequestAdmin(admin.ModelAdmin):
-    list_display = ("title", "buyer", "status", "deadline", "created_at")
+    list_display = (
+        "title",
+        "buyer",
+        "status",
+        "deadline",
+        "expected_delivery_days",
+        "minimum_warranty_months",
+        "created_at",
+    )
     list_filter = ("status", "created_at")
     search_fields = ("title", "buyer__legal_name", "buyer__cnpj")
     inlines = [QuoteItemInline]
@@ -18,9 +26,19 @@ class QuoteRequestAdmin(admin.ModelAdmin):
 
 @admin.register(QuoteOffer)
 class QuoteOfferAdmin(admin.ModelAdmin):
-    list_display = ("quote_request", "supplier", "total_price", "delivery_days", "created_at")
+    list_display = (
+        "quote_request",
+        "supplier",
+        "total_price",
+        "freight_price",
+        "total_with_freight",
+        "delivery_days",
+        "warranty_months",
+        "created_at",
+    )
     list_filter = ("created_at",)
     search_fields = ("quote_request__title", "supplier__legal_name", "supplier__cnpj")
+    readonly_fields = ("total_with_freight",)
 
 
 @admin.register(Product)
