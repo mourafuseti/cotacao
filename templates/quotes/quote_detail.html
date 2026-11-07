@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ quote.title }} | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading"><div><a class="back-link" href="{% url 'quotes:quote_list' %}">← Voltar às cotações</a><span class="eyebrow">DETALHES DA COTAÇÃO</span><h1>{{ quote.title }}</h1><p>{{ quote.buyer }} · Publicada em {{ quote.created_at|date:"d/m/Y" }}</p></div>{% if not is_buyer and quote.is_open %}<a class="button" href="{% url 'quotes:offer_create' quote.pk %}">Enviar proposta</a>{% endif %}</section>
+<div class="detail-grid">
+    <section class="panel detail-panel"><div class="section-heading"><div><h2>Itens solicitados</h2><p>Prazo para propostas: {{ quote.deadline|date:"d/m/Y H:i" }}</p></div><span class="badge">{{ quote.get_status_display }}</span></div>
+        {% if quote.description %}<p class="description">{{ quote.description|linebreaksbr }}</p>{% endif %}
+        <div class="item-table"><div class="item-table-head"><span>Produto</span><span>Quantidade</span><span>Especificações</span></div>
+            {% for item in quote.items.all %}<div class="item-table-row"><strong>{{ item.name }}</strong><span>{{ item.quantity }} {{ item.unit }}</span><span>{{ item.specifications|default:"—" }}</span></div>{% endfor %}
+        </div>
+    </section>
+    {% if is_buyer %}
+    <section class="panel detail-panel"><div class="section-heading"><div><h2>Propostas recebidas</h2><p>{{ offers|length }} fornecedor(es) responderam.</p></div></div>
+        {% for offer in offers %}<div class="offer-row"><div><strong>{{ offer.supplier }}</strong><small>Entrega em {{ offer.delivery_days }} dias</small>{% if offer.notes %}<small>{{ offer.notes }}</small>{% endif %}</div><strong class="price">R$ {{ offer.total_price|floatformat:2 }}</strong></div>{% empty %}<div class="empty-state compact"><strong>Ainda sem propostas</strong><p>As propostas recebidas aparecerão aqui.</p></div>{% endfor %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

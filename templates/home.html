@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Cotação Pro | Compras empresariais{% endblock %}
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <span class="eyebrow">COMPRAS B2B, SEM COMPLICAÇÃO</span>
+        <h1>Encontre os fornecedores certos para o seu próximo negócio.</h1>
+        <p>Publique suas necessidades, receba propostas organizadas e acompanhe tudo em um só lugar.</p>
+        <div class="hero-actions">
+            <a class="button" href="{% url 'accounts:register' %}">Começar agora</a>
+            <a class="button button-quiet" href="{% url 'accounts:login' %}">Acessar minha empresa</a>
+        </div>
+    </div>
+    <div class="hero-card">
+        <div class="hero-card-head"><span class="status-dot"></span> Central de cotações <span class="live-label">AO VIVO</span></div>
+        <div class="flow-row"><span class="flow-icon">01</span><div><strong>Publique sua cotação</strong><small>Itens, quantidades e prazo</small></div></div>
+        <div class="flow-line"></div>
+        <div class="flow-row"><span class="flow-icon">02</span><div><strong>Receba propostas</strong><small>Compare preço e entrega</small></div></div>
+        <div class="flow-line"></div>
+        <div class="flow-row"><span class="flow-icon">03</span><div><strong>Feche o melhor negócio</strong><small>Com tudo registrado</small></div></div>
+    </div>
+</section>
+<section class="feature-grid">
+    <article class="feature"><span>↗</span><h2>Mais alcance</h2><p>Apresente sua demanda a fornecedores e centralize as respostas.</p></article>
+    <article class="feature"><span>▤</span><h2>Mais organização</h2><p>Acompanhe prazos, itens e propostas em um painel simples.</p></article>
+    <article class="feature"><span>◇</span><h2>Mais controle</h2><p>Acesso por empresa, com áreas de comprador e fornecedor.</p></article>
+</section>
+{% endblock %}

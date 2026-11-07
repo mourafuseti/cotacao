@@ -1,0 +1,13 @@
+{% if quotes %}
+    <div class="quote-list">
+        {% for quote in quotes %}
+            <a class="quote-row" href="{% url 'quotes:quote_detail' quote.pk %}">
+                <div><strong>{{ quote.title }}</strong><small>{{ quote.buyer }} · {{ quote.items.count }} item(ns)</small></div>
+                <div class="quote-row-meta"><span class="badge">{{ quote.get_status_display }}</span><small>Prazo: {{ quote.deadline|date:"d/m/Y H:i" }}</small></div>
+                <span class="row-arrow">→</span>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state"><span>▤</span><strong>Nenhuma cotação por aqui ainda</strong><p>Quando houver novidades, elas aparecerão nesta área.</p></div>
+{% endif %}

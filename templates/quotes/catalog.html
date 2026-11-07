@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Catálogo | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <div><span class="eyebrow">PRODUTOS DA EMPRESA</span><h1>Catálogo de produtos</h1><p>Importe sua planilha e reutilize os produtos ao criar cotações.</p></div>
+    <a class="button" href="{% url 'quotes:catalog_import' %}">Importar Excel</a>
+</section>
+<section class="stats-grid catalog-stats">
+    <article class="stat-card"><span>Produtos cadastrados</span><strong>{{ product_count }}</strong><small>na sua empresa</small></article>
+    <article class="stat-card"><span>Disponíveis para cotação</span><strong>{{ active_count }}</strong><small>não bloqueados na planilha</small></article>
+</section>
+<form class="catalog-search" method="get">
+    <input type="search" name="q" value="{{ search }}" placeholder="Buscar por produto, ID, marca ou PN">
+    <button class="button" type="submit">Buscar</button>
+    {% if search %}<a class="button button-quiet" href="{% url 'quotes:catalog' %}">Limpar</a>{% endif %}
+</form>
+{% if products %}
+    <div class="catalog-table">
+        <div class="catalog-table-head"><span>Produto</span><span>Marca / PN</span><span>ID de origem</span><span>Status</span></div>
+        {% for product in products %}
+            <div class="catalog-table-row">
+                <div><strong>{{ product.name }}</strong>{% if product.identification %}<small>{{ product.identification }}</small>{% endif %}</div>
+                <span>{% if product.brand %}{{ product.brand }}{% endif %}{% if product.part_number %}{% if product.brand %} · {% endif %}{{ product.part_number }}{% endif %}{% if not product.brand and not product.part_number %}—{% endif %}</span>
+                <span class="catalog-id">{{ product.external_id }}{% if product.variant_id %}<small>Variação: {{ product.variant_id }}</small>{% endif %}</span>
+                {% if product.blocked %}<span class="badge badge-blocked">Bloqueado</span>{% else %}<span class="badge">Disponível</span>{% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    {% if product_count > 100 %}<p class="form-footnote">Exibindo até 100 produtos. Use a busca para localizar outros itens.</p>{% endif %}
+{% else %}
+    <div class="empty-state"><span>▤</span><strong>{% if search %}Nenhum produto encontrado{% else %}Seu catálogo ainda está vazio{% endif %}</strong><p>{% if search %}Tente outros termos ou limpe a busca.{% else %}Importe a planilha Excel da sua empresa para começar.{% endif %}</p>{% if not search %}<a class="button button-small" href="{% url 'quotes:catalog_import' %}">Importar primeiro catálogo</a>{% endif %}</div>
+{% endif %}
+{% endblock %}

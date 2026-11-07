@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Cotações | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading"><div><span class="eyebrow">GESTÃO DE COMPRAS</span><h1>{% if request.user.company.can_buy %}Minhas cotações{% else %}Cotações disponíveis{% endif %}</h1><p>Acompanhe solicitações e oportunidades em um só lugar.</p></div>{% if request.user.company.can_buy %}<a class="button" href="{% url 'quotes:quote_create' %}">＋ Nova cotação</a>{% endif %}</section>
+{% include "quotes/_quote_rows.html" with quotes=quotes %}
+{% endblock %}

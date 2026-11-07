@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Nova cotação | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading"><div><span class="eyebrow">NOVA SOLICITAÇÃO</span><h1>O que sua empresa precisa?</h1><p>Descreva os itens e defina até quando deseja receber propostas.</p></div></section>
+<form class="panel quote-form" method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+    <h2>Informações da cotação</h2>
+    <div class="form-grid">
+        {% for field in form %}<div class="field {% if field.name == 'description' %}field-wide{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endfor %}
+    </div>
+    <div class="section-heading item-heading"><div><h2>Itens solicitados</h2><p>Informe ao menos um produto ou peça.</p></div></div>
+    {% if catalog_products %}
+        <div class="catalog-picker">
+            <div class="field catalog-picker-search"><label for="catalog-product-search">Localizar no catálogo da empresa</label><input id="catalog-product-search" type="search" placeholder="Digite produto, marca ou PN"></div>
+            <div class="catalog-picker-controls">
+                <select id="catalog-product-picker" aria-label="Produto do catálogo">
+                    <option value="">Selecione um produto cadastrado</option>
+                    {% for product in catalog_products %}
+                        <option value="{{ product.pk }}" data-name="{{ product.name }}" data-brand="{{ product.brand }}" data-part-number="{{ product.part_number }}">{{ product.name }}{% if product.brand %} · {{ product.brand }}{% endif %}{% if product.part_number %} · {{ product.part_number }}{% endif %}{% if product.variant_id %} · var. {{ product.variant_id }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+                <button class="button button-quiet" id="add-catalog-product" type="button">Adicionar selecionado</button>
+            </div>
+            <small>A quantidade da cotação é informada abaixo; o histórico de pedidos do Excel não é usado como quantidade.</small>
+        </div>
+    {% else %}
+        <div class="catalog-hint">Ainda não há produtos disponíveis no seu catálogo. <a href="{% url 'quotes:catalog_import' %}">Importe uma planilha Excel</a> ou preencha os itens manualmente.</div>
+    {% endif %}
+    {{ formset.management_form }}
+    {% if formset.non_form_errors %}<div class="alert error">{{ formset.non_form_errors }}</div>{% endif %}
+    <div class="item-grid item-labels"><span>Produto ou peça</span><span>Quantidade</span><span>Unidade</span><span>Especificações</span></div>
+    <div id="items-container" data-formset-prefix="{{ formset.prefix }}">
+        {% for item_form in formset %}
+            <div class="item-grid" data-item-row>
+                {% for hidden in item_form.hidden_fields %}{{ hidden }}{% endfor %}
+                {% if item_form.product.errors %}<small class="field-error">{{ item_form.product.errors|striptags }}</small>{% endif %}
+                {% for field in item_form.visible_fields %}{% if field.name != "DELETE" %}<div class="field">{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}</div>{% endif %}{% endfor %}
+                {% if item_form.DELETE %}<label class="delete-field">{{ item_form.DELETE }} Remover</label>{% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    <template id="empty-item-form">
+        <div class="item-grid" data-item-row>
+            {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% for field in formset.empty_form.visible_fields %}{% if field.name != "DELETE" %}<div class="field">{{ field }}</div>{% endif %}{% endfor %}
+            {% if formset.empty_form.DELETE %}<label class="delete-field">{{ formset.empty_form.DELETE }} Remover</label>{% endif %}
+        </div>
+    </template>
+    <button class="button button-quiet add-item-button" id="add-item" type="button">＋ Adicionar outro item</button>
+    <div class="form-actions"><a class="button button-quiet" href="{% url 'quotes:dashboard' %}">Cancelar</a><button class="button" type="submit">Publicar cotação</button></div>
+</form>
+{% endblock %}

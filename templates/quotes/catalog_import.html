@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Importar catálogo | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading"><div><a class="back-link" href="{% url 'quotes:catalog' %}">← Voltar ao catálogo</a><span class="eyebrow">IMPORTAÇÃO DE PRODUTOS</span><h1>Importar planilha Excel</h1><p>Confira os dados antes de atualizar o catálogo da sua empresa.</p></div></section>
+<section class="panel import-panel">
+    <div class="import-guidance"><strong>Como funciona</strong><p>Envie um arquivo .xlsx com as colunas <b>ID do registro</b> e <b>Produto Estoque Nome</b>. As demais colunas são opcionais. Até 5.000 linhas e 10 MB por arquivo.</p><p>Produtos com o mesmo ID de origem e ID de variação serão atualizados. A coluna “Nº de Pedidos” é preservada como referência e <b>não</b> será usada como quantidade de uma cotação.</p></div>
+    <form method="post" enctype="multipart/form-data" class="upload-form">
+        {% csrf_token %}
+        <div class="field"><label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>{{ form.file }}{% if form.file.errors %}<small class="field-error">{{ form.file.errors|striptags }}</small>{% endif %}</div>
+        <button class="button" type="submit">Analisar planilha</button>
+    </form>
+</section>
+{% if preview %}
+<section class="section-block">
+    <div class="section-heading"><div><h2>Prévia: {{ preview.filename }}</h2><p>{{ preview.row_count }} linha(s) analisada(s), {{ preview.products|length }} pronta(s) para importar e {{ preview.errors|length }} com problema.</p></div></div>
+    {% if preview.errors %}
+        <div class="alert error">As linhas com problema serão ignoradas. Confira os primeiros registros abaixo.</div>
+        <div class="import-errors">{% for error in preview_errors %}<div><strong>Linha {{ error.row }}</strong><span>{{ error.message }}</span></div>{% endfor %}{% if preview.errors|length > 20 %}<small>Exibindo os primeiros 20 erros.</small>{% endif %}</div>
+    {% endif %}
+    {% if preview_products %}
+        <div class="catalog-table preview-table">
+            <div class="catalog-table-head"><span>Produto</span><span>Marca / PN</span><span>ID de origem</span><span>Status</span></div>
+            {% for product in preview_products %}
+                <div class="catalog-table-row">
+                    <div><strong>{{ product.name }}</strong>{% if product.identification %}<small>{{ product.identification }}</small>{% endif %}</div>
+                    <span>{% if product.brand %}{{ product.brand }}{% endif %}{% if product.part_number %}{% if product.brand %} · {% endif %}{{ product.part_number }}{% endif %}{% if not product.brand and not product.part_number %}—{% endif %}</span>
+                    <span class="catalog-id">{{ product.external_id }}{% if product.variant_id %}<small>Variação: {{ product.variant_id }}</small>{% endif %}</span>
+                    {% if product.blocked %}<span class="badge badge-blocked">Bloqueado</span>{% else %}<span class="badge">Disponível</span>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        {% if preview.products|length > 10 %}<p class="form-footnote">Exibindo os primeiros 10 produtos da prévia.</p>{% endif %}
+        <form method="post" class="form-actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirm">
+            <a class="button button-quiet" href="{% url 'quotes:catalog_import' %}">Cancelar importação</a>
+            <button class="button" type="submit">Confirmar e importar {{ preview.products|length }} produto(s)</button>
+        </form>
+    {% else %}
+        <div class="empty-state compact"><strong>Nenhum produto válido para importar</strong><p>Corrija as linhas indicadas e envie a planilha novamente.</p></div>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

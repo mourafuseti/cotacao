@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Painel | Cotação Pro{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <div><span class="eyebrow">PAINEL DA EMPRESA</span><h1>Olá, {{ company.trade_name|default:company.legal_name }}.</h1><p>Veja o que está acontecendo com suas cotações.</p></div>
+    {% if company.can_buy %}<a class="button" href="{% url 'quotes:quote_create' %}">＋ Nova cotação</a>{% endif %}
+</section>
+<section class="stats-grid">
+    <article class="stat-card"><span>Cotações abertas</span><strong>{{ open_quotes }}</strong><small>disponíveis na plataforma</small></article>
+    {% if company.can_buy %}<article class="stat-card"><span>Minhas solicitações</span><strong>{{ my_quotes|length }}</strong><small>mais recentes</small></article>{% endif %}
+    {% if company.can_supply %}<article class="stat-card"><span>Minhas propostas</span><strong>{{ my_offers|length }}</strong><small>enviadas pela empresa</small></article>{% endif %}
+</section>
+{% if company.can_buy %}
+<section class="section-block">
+    <div class="section-heading"><div><h2>Minhas cotações</h2><p>Acompanhe as solicitações publicadas pela sua empresa.</p></div><a href="{% url 'quotes:quote_list' %}">Ver todas →</a></div>
+    {% include "quotes/_quote_rows.html" with quotes=my_quotes %}
+</section>
+{% endif %}
+{% if company.can_supply %}
+<section class="section-block">
+    <div class="section-heading"><div><h2>Oportunidades para fornecer</h2><p>Cotações abertas que podem combinar com sua empresa.</p></div><a href="{% url 'quotes:quote_list' %}">Ver todas →</a></div>
+    {% include "quotes/_quote_rows.html" with quotes=available_quotes %}
+</section>
+{% endif %}
+{% endblock %}

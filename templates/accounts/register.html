@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar empresa | Cotação Pro{% endblock %}
+{% block content %}
+<section class="form-layout form-layout-wide">
+    <div class="form-intro"><span class="eyebrow">CADASTRO EMPRESARIAL</span><h1>Vamos conectar sua empresa.</h1><p>Cadastre seus dados para comprar, fornecer ou fazer as duas coisas na plataforma.</p></div>
+    <form class="panel form-panel" method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert error">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="form-grid">
+            {% for field in form %}
+                <div class="field {% if field.name == 'legal_name' or field.name == 'trade_name' %}field-wide{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+                    {% if field.help_text %}<small>{{ field.help_text|safe }}</small>{% endif %}
+                    {% if field.errors %}<small class="field-error">{{ field.errors|striptags }}</small>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        <button class="button button-full" type="submit">Criar conta da empresa</button>
+        <p class="form-footnote">Já possui acesso? <a href="{% url 'accounts:login' %}">Entre aqui</a>.</p>
+    </form>
+</section>
+{% endblock %}
